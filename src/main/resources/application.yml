@@ -2,7 +2,7 @@ spring:
   application:
     name: cinema-api
   datasource:
-    url: jdbc:postgresql://localhost:5432/cinema_db
+    url: jdbc:postgresql://localhost:5433/cinema_db
     username: cinema_user
     password: cinema_password
   jpa:
