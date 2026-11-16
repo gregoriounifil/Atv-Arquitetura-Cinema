@@ -3,8 +3,8 @@ spring:
     name: cinema-api
   datasource:
     url: jdbc:postgresql://localhost:5433/cinema_db
-    username: cinema_user
-    password: cinema_password
+    username: adminCinema@login
+    password: adminCinema@Password
   jpa:
     open-in-view: false
     hibernate:
@@ -19,3 +19,13 @@ spring:
   threads:
     virtual:
       enabled: true # Ativa Virtual Threads do Java 21 para alta concorrência na compra de assentos
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    displayRequestDuration: true
+    tryItOutEnabled: true
