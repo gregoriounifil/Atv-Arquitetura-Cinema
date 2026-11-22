@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout do Ingresso • Cinema Pagamentos</title>
+    <link rel="stylesheet" th:href="@{/css/pagamentos-checkout.css}">
+</head>
+<body>
+<div id="checkout-config"
+     class="hidden"
+     th:attr="data-pagamento-id=${pagamento.id},data-status=${pagamento.status.name()},data-segundos-restantes=${pagamento.segundosRestantesParaExpirar}">
+</div>
+
+<div class="page-shell">
+    <header class="topbar">
+        <a th:href="${sandboxAtivo} ? @{/pagamentos/sandbox} : '#'" class="brand">
+            <div class="brand-mark">C</div>
+            <div>
+                <div class="brand-title">CineTicket • Checkout Seguro</div>
+                <div class="brand-subtitle">Confirmação de reserva de assento</div>
+            </div>
+        </a>
+
+        <div class="topbar-actions">
+            <a th:if="${sandboxAtivo}" th:href="@{/pagamentos/sandbox}" class="nav-pill">← Voltar ao Sandbox</a>
+            <div id="timer-pill" class="timer-pill">
+                <span>Tempo restante:</span>
+                <span id="timer-text" class="mono">--:--</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="countdown-bar-track">
+        <div id="countdown-bar-fill" class="countdown-bar-fill"></div>
+    </div>
+
+    <div class="checkout-grid">
+        <!-- Coluna Principal: Pagamento ou Resultado -->
+        <main class="card-panel">
+            <!-- Fluxo Ativo (AGUARDANDO_PAGAMENTO) -->
+            <div id="checkout-form-section"
+                 th:classappend="${pagamento.status.name() != 'AGUARDANDO_PAGAMENTO'} ? ' hidden' : ''">
+                <h1 class="panel-title">Escolha como pagar</h1>
+                <p class="panel-subtitle">Conclua o pagamento dentro da janela de 10 minutos para garantir seu assento.</p>
+
+                <div id="global-error-box" class="alert-banner error hidden" role="alert"></div>
+
+                <div class="method-tabs" role="tablist" aria-label="Métodos de pagamento">
+                    <button type="button" class="method-tab active" data-method="CARTAO_CREDITO">
+                        <span class="method-tab-title">Cartão de Crédito</span>
+                        <span class="method-tab-desc">Aprovação imediata</span>
+                    </button>
+                    <button type="button" class="method-tab" data-method="CARTAO_DEBITO">
+                        <span class="method-tab-title">Cartão de Débito</span>
+                        <span class="method-tab-desc">Débito em conta</span>
+                    </button>
+                    <button type="button" class="method-tab" data-method="PIX">
+                        <span class="method-tab-title">PIX</span>
+                        <span class="method-tab-desc">QR Code instantâneo</span>
+                    </button>
+                </div>
+
+                <!-- Painel Cartão (Crédito/Débito) -->
+                <div id="card-fields-panel">
+                    <div class="card-preview" aria-hidden="true">
+                        <div class="card-preview-top">
+                            <div class="card-chip"></div>
+                            <span id="preview-method" class="card-badge">CRÉDITO</span>
+                        </div>
+                        <div id="preview-number" class="card-preview-number mono">•••• •••• •••• ••••</div>
+                        <div class="card-preview-bottom">
+                            <div>
+                                <span class="card-preview-label">Titular</span>
+                                <span id="preview-holder" class="card-preview-value">NOME DO TITULAR</span>
+                            </div>
+                            <div>
+                                <span class="card-preview-label">Validade</span>
+                                <span id="preview-expiry" class="card-preview-value mono">MM/AAAA</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="quick-chips">
+                        <span class="quick-chips-label">Cartões de teste:</span>
+                        <button type="button" class="chip-btn chip-success" data-preset-card="4111 1111 1111 4242">Final 4242 (Aprovar)</button>
+                        <button type="button" class="chip-btn chip-danger" data-preset-card="5500 0000 0000 0000">Final 0000 (Recusar)</button>
+                        <button type="button" class="chip-btn" data-preset-card="4000 0000 0000 9999">Final 9999 (Lentidão 1,5s)</button>
+                    </div>
+
+                    <form onsubmit="return false;" novalidate>
+                        <div class="form-grid">
+                            <div class="form-group full">
+                                <label for="numeroCartao">Número do cartão</label>
+                                <input id="numeroCartao" type="text" inputmode="numeric" autocomplete="cc-number"
+                                       placeholder="0000 0000 0000 0000" maxlength="19">
+                                <span id="erro-numeroCartao" class="field-error"></span>
+                            </div>
+
+                            <div class="form-group full">
+                                <label for="nomeTitular">Nome impresso no cartão</label>
+                                <input id="nomeTitular" type="text" autocomplete="cc-name"
+                                       placeholder="EX: JOAO V NOVAES">
+                                <span id="erro-nomeTitular" class="field-error"></span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="validade">Validade (MM/AA ou MM/AAAA)</label>
+                                <input id="validade" type="text" inputmode="numeric" autocomplete="cc-exp"
+                                       placeholder="12/2030" maxlength="7">
+                                <span id="erro-validade" class="field-error"></span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="cvv">CVV</label>
+                                <input id="cvv" type="text" inputmode="numeric" autocomplete="cc-csc"
+                                       placeholder="123" maxlength="4">
+                                <span id="erro-cvv" class="field-error"></span>
+                            </div>
+                        </div>
+
+                        <button id="submit-card-btn" type="button" class="btn btn-primary">
+                            Finalizar Pagamento
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Painel PIX -->
+                <div id="pix-fields-panel" class="hidden">
+                    <div class="pix-box">
+                        <div class="pix-qr-frame" aria-label="QR Code PIX simulado">
+                            <svg width="168" height="168" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+                                <rect width="21" height="21" fill="#ffffff"/>
+                                <path d="M1,1 h6 v6 h-6 z M2,2 v4 h4 v-4 z M3,3 h2 v2 h-2 z" fill="#090b10"/>
+                                <path d="M14,1 h6 v6 h-6 z M15,2 v4 h4 v-4 z M16,3 h2 v2 h-2 z" fill="#090b10"/>
+                                <path d="M1,14 h6 v6 h-6 z M2,15 v4 h4 v-4 z M3,16 h2 v2 h-2 z" fill="#090b10"/>
+                                <path d="M9,1 h1 v2 h-1 z M11,1 h2 v1 h-2 z M8,4 h3 v1 h-3 z M12,3 h1 v3 h-1 z M9,6 h2 v2 h-2 z M1,9 h2 v1 h-2 z M4,8 h2 v2 h-2 z M7,9 h3 v2 h-3 z M11,8 h2 v2 h-2 z M14,9 h3 v1 h-3 z M18,8 h2 v3 h-2 z M8,12 h2 v2 h-2 z M11,11 h3 v2 h-3 z M15,12 h2 v2 h-2 z M18,13 h2 v2 h-2 z M9,15 h2 v2 h-2 z M12,14 h2 v3 h-2 z M16,15 h4 v1 h-4 z M9,18 h3 v2 h-3 z M14,18 h2 v2 h-2 z M17,17 h3 v3 h-3 z" fill="#090b10"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <strong>Escaneie o QR Code ou copie o código PIX</strong>
+                            <p class="panel-subtitle" style="margin-bottom: 0;">
+                                Em ambiente de homologação, clique no botão abaixo após copiar para confirmar o pagamento instantâneo.
+                            </p>
+                        </div>
+                        <div class="pix-copy-row">
+                            <input id="pix-payload-input" type="text" class="mono" readonly th:value="${codigoPixSimulado}">
+                            <button id="copy-pix-btn" type="button" class="btn btn-secondary">Copiar</button>
+                        </div>
+                    </div>
+
+                    <button id="submit-pix-btn" type="button" class="btn btn-success">
+                        Confirmar Pagamento PIX
+                    </button>
+                </div>
+            </div>
+
+            <!-- Painéis de Estados Terminais -->
+            <div id="checkout-result-section"
+                 th:classappend="${pagamento.status.name() == 'AGUARDANDO_PAGAMENTO'} ? ' hidden' : ''">
+
+                <!-- APROVADO -->
+                <div id="panel-aprovado" class="result-panel"
+                     th:classappend="${pagamento.status.name() != 'APROVADO'} ? ' hidden' : ''">
+                    <div class="result-icon approved">✓</div>
+                    <h2 class="result-title">Pagamento Aprovado!</h2>
+                    <p class="result-desc">
+                        Seu pagamento foi confirmado e o evento de confirmação já foi disparado para emissão definitiva do ingresso.
+                    </p>
+                    <div class="result-meta">
+                        <div class="result-meta-row">
+                            <span>Código da Transação</span>
+                            <strong id="result-auth-code" class="mono" th:text="${pagamento.codigoTransacaoGateway}">AUTH-000000</strong>
+                        </div>
+                        <div class="result-meta-row">
+                            <span>Método Utilizado</span>
+                            <strong id="result-metodo" th:text="${pagamento.metodoPagamento}">CARTAO_CREDITO</strong>
+                        </div>
+                        <div class="result-meta-row">
+                            <span>Filme / Assento</span>
+                            <strong th:text="${filme + ' • Assento ' + assento}">Duna: Parte 2 • Assento G12</strong>
+                        </div>
+                    </div>
+                    <a th:if="${sandboxAtivo}" th:href="@{/pagamentos/sandbox}" class="btn btn-primary">
+                        Testar Novo Pagamento no Sandbox
+                    </a>
+                </div>
+
+                <!-- RECUSADO -->
+                <div id="panel-recusado" class="result-panel"
+                     th:classappend="${pagamento.status.name() != 'RECUSADO'} ? ' hidden' : ''">
+                    <div class="result-icon refused">✕</div>
+                    <h2 class="result-title">Pagamento Recusado</h2>
+                    <p class="result-desc">
+                        A operadora não autorizou a cobrança. Conforme a máquina de estados do domínio, este pagamento foi encerrado e a reserva do assento liberada.
+                    </p>
+                    <div class="result-meta">
+                        <div class="result-meta-row">
+                            <span>Motivo informado</span>
+                            <strong id="result-motivo-recusa" th:text="${pagamento.motivoRecusa}">Transação negada pelo emissor</strong>
+                        </div>
+                    </div>
+                    <a th:if="${sandboxAtivo}" th:href="@{/pagamentos/sandbox}" class="btn btn-primary">
+                        Iniciar Nova Reserva no Sandbox
+                    </a>
+                </div>
+
+                <!-- EXPIRADO -->
+                <div id="panel-expirado" class="result-panel"
+                     th:classappend="${pagamento.status.name() != 'EXPIRADO'} ? ' hidden' : ''">
+                    <div class="result-icon expired">!</div>
+                    <h2 class="result-title">Tempo de Pagamento Expirado</h2>
+                    <p id="result-motivo-expirado" class="result-desc"
+                       th:text="${pagamento.motivoRecusa != null ? pagamento.motivoRecusa : 'O prazo de 10 minutos para concluir o checkout venceu e o assento retornou para a sessão.'}">
+                        O prazo de 10 minutos venceu.
+                    </p>
+                    <a th:if="${sandboxAtivo}" th:href="@{/pagamentos/sandbox}" class="btn btn-primary">
+                        Gerar Nova Reserva no Sandbox
+                    </a>
+                </div>
+            </div>
+        </main>
+
+        <!-- Coluna Lateral: Resumo do Ingresso & Ferramentas Sandbox -->
+        <aside class="card-panel">
+            <div class="ticket-header">
+                <div>
+                    <div class="ticket-movie" th:text="${filme}">Duna: Parte 2</div>
+                    <div class="brand-subtitle" th:text="${sala}">Sala 04 • IMAX</div>
+                </div>
+                <span id="summary-status-badge"
+                      class="status-badge"
+                      th:classappend="' status-' + ${pagamento.status.name()}"
+                      th:text="${pagamento.status.name()}">AGUARDANDO_PAGAMENTO</span>
+            </div>
+
+            <div class="summary-list">
+                <div class="summary-item">
+                    <span>Sessão</span>
+                    <strong th:text="${horario}">Hoje • 21:00</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Assento selecionado</span>
+                    <strong th:text="${assento}">G12</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Janela de reserva</span>
+                    <strong>10 minutos</strong>
+                </div>
+            </div>
+
+            <div class="summary-total">
+                <span>Total a pagar</span>
+                <span class="summary-total-value"
+                      th:text="${'R$ ' + #numbers.formatDecimal(pagamento.valor, 1, 'POINT', 2, 'COMMA')}">R$ 45,00</span>
+            </div>
+
+            <div class="trace-box mono">
+                <div><strong>pagamentoId:</strong> <span th:text="${pagamento.id}">uuid</span></div>
+                <div><strong>reservaId:</strong> <span th:text="${pagamento.reservaId}">uuid</span></div>
+            </div>
+
+            <div id="sandbox-tools-box"
+                 th:if="${sandboxAtivo and pagamento.status.name() == 'AGUARDANDO_PAGAMENTO'}"
+                 class="sandbox-tools">
+                <div class="sandbox-tools-title">Controles rápidos de UX (Sandbox)</div>
+                <button id="simulate-expire-btn" type="button" class="btn btn-danger-outline">
+                    Simular Expiração (Avançar 10 min)
+                </button>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<script th:src="@{/js/pagamentos-checkout.js}"></script>
+</body>
+</html>

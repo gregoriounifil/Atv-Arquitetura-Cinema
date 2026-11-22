@@ -7,6 +7,7 @@ import br.com.cinema.pagamentos.domain.exception.TransicaoEstadoPagamentoInvalid
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -44,6 +45,18 @@ public class PagamentoExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Transição de Estado Inválida");
         problem.setType(URI.create("https://cinema.com.br/erros/transicao-invalida"));
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ProblemDetail> tratarConflitoConcorrencia(ObjectOptimisticLockingFailureException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "Este pagamento foi atualizado simultaneamente por outra operação. Recarregue o status antes de tentar novamente."
+        );
+        problem.setTitle("Conflito de Concorrência no Pagamento");
+        problem.setType(URI.create("https://cinema.com.br/erros/conflito-concorrencia"));
         problem.setProperty("timestamp", Instant.now());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }

@@ -37,4 +37,11 @@ public class FakePaymentGatewayAdapter implements GatewayCartaoPort {
         log.info("[FAKE-GATEWAY] Transacao APROVADA para pagamentoId={}, auth={}", pagamentoId, codigoAutorizacao);
         return new RespostaGateway(true, codigoAutorizacao, null);
     }
+
+    @Override
+    public RespostaGateway processarPix(UUID pagamentoId, BigDecimal valor) {
+        String codigoPix = "PIX-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        log.info("[FAKE-GATEWAY] PIX confirmado para pagamentoId={}, valor={}, codigo={}", pagamentoId, valor, codigoPix);
+        return new RespostaGateway(true, codigoPix, null);
+    }
 }

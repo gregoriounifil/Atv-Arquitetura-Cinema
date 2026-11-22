@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -164,6 +165,47 @@ class PagamentoControllerTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.title").value("Transição de Estado Inválida"));
+        }
+
+        @Test
+        @DisplayName("Deve processar pagamento via PIX sem exigir dados de cartão e retornar 200 OK")
+        void deveProcessarPagamentoPixSemDadosCartao() throws Exception {
+            PagamentoResult resultadoPix = new PagamentoResult(
+                    pagamentoId, reservaId, sessaoId, assentoId, clienteId,
+                    new BigDecimal("45.00"), "RESERVA-" + reservaId,
+                    StatusPagamento.APROVADO, MetodoPagamento.PIX, "PIX-ABC12345", null,
+                    agora, agora.plus(Duration.ofMinutes(10)), agora
+            );
+            when(processarPagamentoUseCase.executar(any(ProcessarPagamentoCommand.class))).thenReturn(resultadoPix);
+
+            ProcessarPagamentoRequest requestPix = new ProcessarPagamentoRequest(
+                    MetodoPagamento.PIX, null, null, null, null
+            );
+
+            mockMvc.perform(post("/api/v1/pagamentos/{id}/processar", pagamentoId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(requestPix)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("APROVADO"))
+                    .andExpect(jsonPath("$.metodoPagamento").value("PIX"))
+                    .andExpect(jsonPath("$.codigoTransacaoGateway").value("PIX-ABC12345"));
+        }
+
+        @Test
+        @DisplayName("Deve retornar 409 Conflict quando ocorrer conflito de concorrência (@Version)")
+        void deveRetornar409QuandoHouverConflitoOtimista() throws Exception {
+            when(processarPagamentoUseCase.executar(any(ProcessarPagamentoCommand.class)))
+                    .thenThrow(new ObjectOptimisticLockingFailureException("PagamentoJpaEntity", pagamentoId));
+
+            ProcessarPagamentoRequest request = new ProcessarPagamentoRequest(
+                    MetodoPagamento.PIX, null, null, null, null
+            );
+
+            mockMvc.perform(post("/api/v1/pagamentos/{id}/processar", pagamentoId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.title").value("Conflito de Concorrência no Pagamento"));
         }
     }
 

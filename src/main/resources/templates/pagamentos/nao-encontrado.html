@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagamento Não Encontrado • Cinema Pagamentos</title>
+    <link rel="stylesheet" th:href="@{/css/pagamentos-checkout.css}">
+</head>
+<body>
+<div class="page-shell">
+    <header class="topbar">
+        <a th:href="${sandboxAtivo} ? @{/pagamentos/sandbox} : '#'" class="brand">
+            <div class="brand-mark">C</div>
+            <div>
+                <div class="brand-title">CineTicket • Checkout</div>
+                <div class="brand-subtitle">Consulta de cobrança</div>
+            </div>
+        </a>
+    </header>
+
+    <section class="card-panel result-panel" style="max-width: 560px; margin: 40px auto;">
+        <div class="result-icon refused">?</div>
+        <h1 class="result-title">Cobrança não encontrada</h1>
+        <p class="result-desc" th:text="${mensagem}">
+            Não encontramos nenhum pagamento com o identificador informado.
+        </p>
+        <div class="trace-box mono" style="margin-bottom: 20px;">
+            ID solicitado: <span th:text="${pagamentoId}">uuid</span>
+        </div>
+        <a th:if="${sandboxAtivo}" th:href="@{/pagamentos/sandbox}" class="btn btn-primary">
+            Voltar para o Sandbox
+        </a>
+    </section>
+</div>
+</body>
+</html>
