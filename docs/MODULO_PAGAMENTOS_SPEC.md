@@ -49,7 +49,8 @@ src/main/java/br/com/cinema/
     │   │   └── out/                                   # Driven Ports (Contratos de Saída)
     │   │       ├── SalvarPagamentoPort.java           # Persiste/atualiza o Aggregate Pagamento
     │   │       ├── BuscarPagamentoPort.java           # Busca por ID, reservaId ou pendentes vencidos
-    │   │       ├── GatewayCartaoPort.java             # Contrato com adquirente/gateway externo
+    │   │       ├── GatewayCartaoPort.java             # Contrato com adquirente de cartao (ISP do SOLID)
+    │   │       ├── GatewayPixPort.java                # Contrato isolado para liquidacao PIX (ISP do SOLID)
     │   │       ├── RespostaGateway.java               # Record de resposta do gateway (aprovado, codigo, motivo)
     │   │       └── PublicarEventoPagamentoPort.java   # Publica eventos de aprovação, recusa ou expiração
     │   └── service/                                   # Implementações das Ports In (@Service, @Transactional)
@@ -63,9 +64,13 @@ src/main/java/br/com/cinema/
         │   └── PagamentosSchedulingConfig.java        # @Configuration @EnableScheduling
         ├── adapter/
         │   ├── in/
-        │   │   ├── web/                               # Driving Adapter REST
+        │   │   ├── web/                               # Driving Adapters Web (REST e Simulador)
         │   │   │   ├── PagamentoController.java       # POST /api/v1/pagamentos/{id}/processar, GET /{id}
+        │   │   │   ├── PagamentoSandboxController.java # Simulador de desenvolvimento (@Profile("!prod"))
+        │   │   │   ├── PagamentoViewController.java    # Renderizacao de checkout visual (/pagamentos/{id}/checkout)
         │   │   │   ├── ProcessarPagamentoRequest.java # DTO de entrada com Bean Validation (@Valid)
+        │   │   │   ├── ValidDadosPagamento.java       # Anotacao de validacao condicional cartao vs pix
+        │   │   │   ├── ValidDadosPagamentoValidator.java # Validador Bean Validation
         │   │   │   ├── PagamentoResponse.java         # DTO de saída HTTP
         │   │   │   └── PagamentoExceptionHandler.java # @RestControllerAdvice com ProblemDetail (RFC 7807)
         │   │   ├── messaging/                         # Driving Adapter de Eventos
@@ -83,12 +88,33 @@ src/main/java/br/com/cinema/
         │       └── messaging/                         # Driven Adapter de Publicação de Eventos
         │           └── SpringEventPagamentoPublisherAdapter.java # Usa ApplicationEventPublisher (Outbox)
 
-src/main/resources/db/migration/
-└── V3__pagamentos_init.sql                            # DDL oficial da tabela pagamentos e índices
+src/main/resources/
+├── db/migration/
+│   └── V5__reestruturar_tabela_pagamentos.sql         # DDL oficial da tabela pagamentos e índices
+├── templates/pagamentos/
+│   ├── sandbox.html                                   # Simulador visual para testes em desenvolvimento (!prod)
+│   ├── checkout.html                                  # Tela de checkout com cartao e PIX
+│   └── nao-encontrado.html                            # Tela de cobranca nao encontrada
+└── static/
+    ├── css/pagamentos-checkout.css                    # Estilos do checkout
+    └── js/pagamentos-checkout.js                      # Script do cronometro regressivo e integracao
 
 src/test/java/br/com/cinema/pagamentos/
 ├── domain/
 │   └── PagamentoDomainTest.java                       # Testes unitários puros da máquina de estados (< 50ms)
+├── application/service/
+│   ├── ProcessarPagamentoServiceTest.java             # Testes unitarios do processador (cartao e pix)
+│   ├── CriarCobrancaReservaServiceTest.java
+│   ├── ConsultarPagamentoServiceTest.java
+│   └── ExpirarPagamentosPendentesServiceTest.java
+├── infrastructure/adapter/
+│   ├── in/web/
+│   │   ├── PagamentoControllerTest.java
+│   │   ├── PagamentoSandboxControllerTest.java
+│   │   └── PagamentoViewControllerTest.java
+│   └── out/
+│       ├── gateway/FakePaymentGatewayAdapterTest.java
+│       └── persistence/PagamentoPersistenceAdapterTest.java
 └── FluxoPagamentoIntegrationTest.java                 # Teste ponta-a-ponta independente da Dupla 2
 ```
 
@@ -602,19 +628,24 @@ public class ExpiracaoPagamentoSchedulerJob {
 
 ## 5. Gateway Mockado & Desenvolvimento Independente (Sem Depender da Dupla 2)
 
-Para que a Dupla 3 desenvolva, teste e homologue 100% do módulo `pagamentos` sem esperar uma única linha de código da Dupla 2 (`reservas`), utilizamos dois componentes-chave:
+Para que a Dupla 3 desenvolva, teste e homologue 100% do módulo `pagamentos` sem esperar uma única linha de código da Dupla 2 (`reservas`), utilizamos três componentes-chave:
 
-### 5.1. `FakePaymentGatewayAdapter.java` (Simulação Determinística de Adquirente)
-Localizado em `infrastructure/adapter/out/gateway/FakePaymentGatewayAdapter.java`, este adaptador implementa `GatewayCartaoPort` e permite controlar o comportamento do cartão pelo final do número do cartão nos testes e no Swagger:
+### 5.1. `FakePaymentGatewayAdapter.java` e Segregação de Portas (SOLID / ISP)
+Localizado em `infrastructure/adapter/out/gateway/FakePaymentGatewayAdapter.java`, este adaptador implementa duas portas de saída segregadas, respeitando o **Princípio de Segregação de Interfaces (ISP)** da Arquitetura Hexagonal:
+- **`GatewayCartaoPort`:** Contrato específico para processamento de cartões de crédito e débito via adquirente.
+- **`GatewayPixPort`:** Contrato específico para liquidação instantânea via PIX.
 
-- **Cartão terminando em `0000`:** Simula **RECUSA** da operadora (`"Saldo ou limite insuficiente no cartao"`).
-- **Cartão terminando em `9999`:** Simula **lentidão de rede** (`Thread.sleep(1500)`) — ideal para exercitar Virtual Threads do Java 21 sem bloquear OS threads.
-- **Qualquer outro final (ex: `1111`, `4242`):** Simula **APROVAÇÃO** retornando código de autorização `AUTH-<UUID>`.
+O adaptador simula comportamento determinístico para testes e para o Swagger:
+- **Cartão terminando em `0000`:** Simula **RECUSA** da operadora (`"Transacao negada pelo emissor: limite insuficiente."`).
+- **Cartão terminando em `9999`:** Simula **lentidão de rede** (`Thread.sleep(1500)`) — exercita Virtual Threads do Java 21 sem bloquear OS threads.
+- **Qualquer outro final de cartão (ex: `1111`, `4242`):** Simula **APROVAÇÃO** retornando código de autorização `AUTH-<UUID>`.
+- **PIX:** Simula **APROVAÇÃO instantânea** retornando código de liquidação `PIX-<UUID>`.
 
 ```java
 package br.com.cinema.pagamentos.infrastructure.adapter.out.gateway;
 
 import br.com.cinema.pagamentos.application.port.out.GatewayCartaoPort;
+import br.com.cinema.pagamentos.application.port.out.GatewayPixPort;
 import br.com.cinema.pagamentos.application.port.out.RespostaGateway;
 import br.com.cinema.pagamentos.domain.model.DadosCartao;
 import org.slf4j.Logger;
@@ -625,7 +656,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 @Component
-public class FakePaymentGatewayAdapter implements GatewayCartaoPort {
+public class FakePaymentGatewayAdapter implements GatewayCartaoPort, GatewayPixPort {
 
     private static final Logger log = LoggerFactory.getLogger(FakePaymentGatewayAdapter.class);
 
@@ -651,10 +682,23 @@ public class FakePaymentGatewayAdapter implements GatewayCartaoPort {
         log.info("[FAKE-GATEWAY] Transacao APROVADA para pagamentoId={}, auth={}", pagamentoId, codigoAutorizacao);
         return new RespostaGateway(true, codigoAutorizacao, null);
     }
+
+    @Override
+    public RespostaGateway processarPix(UUID pagamentoId, BigDecimal valor) {
+        String codigoPix = "PIX-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        log.info("[FAKE-GATEWAY] PIX confirmado para pagamentoId={}, valor={}, codigo={}", pagamentoId, valor, codigoPix);
+        return new RespostaGateway(true, codigoPix, null);
+    }
 }
 ```
 
-### 5.2. Contratos de Eventos em `shared/events/` (Para Compilação e Testes Imediatos)
+### 5.2. Simulador de Desenvolvimento (`PagamentoSandboxController.java`)
+O componente `PagamentoSandboxController` (anotado com `@Profile("!prod")`) atua como um **simulador exclusivo para testes e homologação local**, permitindo validar o ciclo de vida completo do pagamento de forma 100% independente da Dupla 2:
+- **Rota `/pagamentos/sandbox`:** Permite gerar uma cobrança fictícia com status `AGUARDANDO_PAGAMENTO` e prazo de expiração de 10 minutos.
+- **Rota `/pagamentos/{id}/checkout`:** Permite exercitar a transição de estado da cobrança (Cartão de Crédito, Débito, PIX e simulação de expiração por timeout).
+- **Isolamento de Ambiente:** Por estar sob o profile `!prod`, este controlador não interfere no fluxo de produção quando a aplicação for integrada com o módulo de reservas definitivo.
+
+### 5.3. Contratos de Eventos em `shared/events/` (Para Compilação e Testes Imediatos)
 ```java
 package br.com.cinema.shared.events;
 
@@ -719,7 +763,7 @@ public record PagamentoExpiradoEvent(
 ) {}
 ```
 
-### 5.3. Teste de Integração Independente (`FluxoPagamentoIntegrationTest.java`)
+### 5.4. Teste de Integração Independente (`FluxoPagamentoIntegrationTest.java`)
 Este teste valida 100% da Dupla 3 disparando um `AssentoReservadoEvent` sintético, sem precisar que a Dupla 2 tenha criado uma única classe em `reservas`:
 
 ```java
