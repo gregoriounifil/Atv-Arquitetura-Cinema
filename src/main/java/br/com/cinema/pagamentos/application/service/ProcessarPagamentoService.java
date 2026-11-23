@@ -5,6 +5,7 @@ import br.com.cinema.pagamentos.application.port.in.ProcessarPagamentoCommand;
 import br.com.cinema.pagamentos.application.port.in.ProcessarPagamentoUseCase;
 import br.com.cinema.pagamentos.application.port.out.BuscarPagamentoPort;
 import br.com.cinema.pagamentos.application.port.out.GatewayCartaoPort;
+import br.com.cinema.pagamentos.application.port.out.GatewayPixPort;
 import br.com.cinema.pagamentos.application.port.out.PublicarEventoPagamentoPort;
 import br.com.cinema.pagamentos.application.port.out.RespostaGateway;
 import br.com.cinema.pagamentos.application.port.out.SalvarPagamentoPort;
@@ -32,17 +33,20 @@ public class ProcessarPagamentoService implements ProcessarPagamentoUseCase {
     private final BuscarPagamentoPort buscarPagamentoPort;
     private final SalvarPagamentoPort salvarPagamentoPort;
     private final GatewayCartaoPort gatewayCartaoPort;
+    private final GatewayPixPort gatewayPixPort;
     private final PublicarEventoPagamentoPort publicarEventoPagamentoPort;
 
     public ProcessarPagamentoService(
             BuscarPagamentoPort buscarPagamentoPort,
             SalvarPagamentoPort salvarPagamentoPort,
             GatewayCartaoPort gatewayCartaoPort,
+            GatewayPixPort gatewayPixPort,
             PublicarEventoPagamentoPort publicarEventoPagamentoPort
     ) {
         this.buscarPagamentoPort = buscarPagamentoPort;
         this.salvarPagamentoPort = salvarPagamentoPort;
         this.gatewayCartaoPort = gatewayCartaoPort;
+        this.gatewayPixPort = gatewayPixPort;
         this.publicarEventoPagamentoPort = publicarEventoPagamentoPort;
     }
 
@@ -66,7 +70,7 @@ public class ProcessarPagamentoService implements ProcessarPagamentoUseCase {
 
         if (command.metodoPagamento() == MetodoPagamento.PIX) {
             identificadorOrigem = "PIX";
-            resposta = gatewayCartaoPort.processarPix(pagamento.getId(), pagamento.getValor());
+            resposta = gatewayPixPort.processarPix(pagamento.getId(), pagamento.getValor());
         } else {
             DadosCartao dadosCartao = new DadosCartao(
                     command.numeroCartao(),

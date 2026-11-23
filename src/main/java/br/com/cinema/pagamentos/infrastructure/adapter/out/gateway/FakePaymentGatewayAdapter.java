@@ -1,6 +1,7 @@
 package br.com.cinema.pagamentos.infrastructure.adapter.out.gateway;
 
 import br.com.cinema.pagamentos.application.port.out.GatewayCartaoPort;
+import br.com.cinema.pagamentos.application.port.out.GatewayPixPort;
 import br.com.cinema.pagamentos.application.port.out.RespostaGateway;
 import br.com.cinema.pagamentos.domain.model.DadosCartao;
 import org.slf4j.Logger;
@@ -11,7 +12,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 @Component
-public class FakePaymentGatewayAdapter implements GatewayCartaoPort {
+public class FakePaymentGatewayAdapter implements GatewayCartaoPort, GatewayPixPort {
 
     private static final Logger log = LoggerFactory.getLogger(FakePaymentGatewayAdapter.class);
 

@@ -4,6 +4,7 @@ import br.com.cinema.pagamentos.application.port.in.PagamentoResult;
 import br.com.cinema.pagamentos.application.port.in.ProcessarPagamentoCommand;
 import br.com.cinema.pagamentos.application.port.out.BuscarPagamentoPort;
 import br.com.cinema.pagamentos.application.port.out.GatewayCartaoPort;
+import br.com.cinema.pagamentos.application.port.out.GatewayPixPort;
 import br.com.cinema.pagamentos.application.port.out.PublicarEventoPagamentoPort;
 import br.com.cinema.pagamentos.application.port.out.RespostaGateway;
 import br.com.cinema.pagamentos.application.port.out.SalvarPagamentoPort;
@@ -46,6 +47,8 @@ class ProcessarPagamentoServiceTest {
     private SalvarPagamentoPort salvarPagamentoPort;
     @Mock
     private GatewayCartaoPort gatewayCartaoPort;
+    @Mock
+    private GatewayPixPort gatewayPixPort;
     @Mock
     private PublicarEventoPagamentoPort publicarEventoPagamentoPort;
 
@@ -116,7 +119,7 @@ class ProcessarPagamentoServiceTest {
     void deveProcessarPagamentoPix() {
         Pagamento pendente = criarPagamentoPendente(Instant.now());
         when(buscarPagamentoPort.buscarPorId(pendente.getId())).thenReturn(Optional.of(pendente));
-        when(gatewayCartaoPort.processarPix(pendente.getId(), pendente.getValor()))
+        when(gatewayPixPort.processarPix(pendente.getId(), pendente.getValor()))
                 .thenReturn(new RespostaGateway(true, "PIX-12345678", null));
         when(salvarPagamentoPort.salvar(any(Pagamento.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -148,7 +151,7 @@ class ProcessarPagamentoServiceTest {
                 null, null, null, null
         ))).isInstanceOf(PagamentoExpiradoException.class);
 
-        verifyNoInteractions(gatewayCartaoPort);
+        verifyNoInteractions(gatewayCartaoPort, gatewayPixPort);
         verify(salvarPagamentoPort).salvar(vencido);
         verify(publicarEventoPagamentoPort).publicarPagamentoExpirado(any());
     }
@@ -160,7 +163,7 @@ class ProcessarPagamentoServiceTest {
         Instant criadoEm = Instant.now().minus(Duration.ofMinutes(10)).plusMillis(40);
         Pagamento quaseVencido = criarPagamentoPendente(criadoEm);
         when(buscarPagamentoPort.buscarPorId(quaseVencido.getId())).thenReturn(Optional.of(quaseVencido));
-        when(gatewayCartaoPort.processarPix(quaseVencido.getId(), quaseVencido.getValor()))
+        when(gatewayPixPort.processarPix(quaseVencido.getId(), quaseVencido.getValor()))
                 .thenAnswer(inv -> {
                     Thread.sleep(120);
                     return new RespostaGateway(true, "PIX-TARDE", null);
@@ -188,7 +191,7 @@ class ProcessarPagamentoServiceTest {
                 id, MetodoPagamento.PIX, null, null, null, null
         ))).isInstanceOf(PagamentoNaoEncontradoException.class);
 
-        verifyNoInteractions(gatewayCartaoPort, salvarPagamentoPort, publicarEventoPagamentoPort);
+        verifyNoInteractions(gatewayCartaoPort, gatewayPixPort, salvarPagamentoPort, publicarEventoPagamentoPort);
     }
 
     @Test
@@ -202,6 +205,6 @@ class ProcessarPagamentoServiceTest {
                 aprovado.getId(), MetodoPagamento.PIX, null, null, null, null
         ))).isInstanceOf(TransicaoEstadoPagamentoInvalidaException.class);
 
-        verifyNoInteractions(gatewayCartaoPort, salvarPagamentoPort, publicarEventoPagamentoPort);
+        verifyNoInteractions(gatewayCartaoPort, gatewayPixPort, salvarPagamentoPort, publicarEventoPagamentoPort);
     }
 }
