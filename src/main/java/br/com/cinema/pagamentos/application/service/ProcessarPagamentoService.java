@@ -5,6 +5,7 @@ import br.com.cinema.pagamentos.application.port.in.ProcessarPagamentoCommand;
 import br.com.cinema.pagamentos.application.port.in.ProcessarPagamentoUseCase;
 import br.com.cinema.pagamentos.application.port.out.BuscarPagamentoPort;
 import br.com.cinema.pagamentos.application.port.out.GatewayCartaoPort;
+import br.com.cinema.pagamentos.application.port.out.GatewayPixPort;
 import br.com.cinema.pagamentos.application.port.out.PublicarEventoPagamentoPort;
 import br.com.cinema.pagamentos.application.port.out.RespostaGateway;
 import br.com.cinema.pagamentos.application.port.out.SalvarPagamentoPort;
@@ -12,6 +13,7 @@ import br.com.cinema.pagamentos.domain.exception.PagamentoExpiradoException;
 import br.com.cinema.pagamentos.domain.exception.PagamentoNaoEncontradoException;
 import br.com.cinema.pagamentos.domain.exception.TransicaoEstadoPagamentoInvalidaException;
 import br.com.cinema.pagamentos.domain.model.DadosCartao;
+import br.com.cinema.pagamentos.domain.model.MetodoPagamento;
 import br.com.cinema.pagamentos.domain.model.Pagamento;
 import br.com.cinema.shared.events.PagamentoAprovadoEvent;
 import br.com.cinema.shared.events.PagamentoExpiradoEvent;
@@ -31,17 +33,20 @@ public class ProcessarPagamentoService implements ProcessarPagamentoUseCase {
     private final BuscarPagamentoPort buscarPagamentoPort;
     private final SalvarPagamentoPort salvarPagamentoPort;
     private final GatewayCartaoPort gatewayCartaoPort;
+    private final GatewayPixPort gatewayPixPort;
     private final PublicarEventoPagamentoPort publicarEventoPagamentoPort;
 
     public ProcessarPagamentoService(
             BuscarPagamentoPort buscarPagamentoPort,
             SalvarPagamentoPort salvarPagamentoPort,
             GatewayCartaoPort gatewayCartaoPort,
+            GatewayPixPort gatewayPixPort,
             PublicarEventoPagamentoPort publicarEventoPagamentoPort
     ) {
         this.buscarPagamentoPort = buscarPagamentoPort;
         this.salvarPagamentoPort = salvarPagamentoPort;
         this.gatewayCartaoPort = gatewayCartaoPort;
+        this.gatewayPixPort = gatewayPixPort;
         this.publicarEventoPagamentoPort = publicarEventoPagamentoPort;
     }
 
@@ -57,32 +62,35 @@ public class ProcessarPagamentoService implements ProcessarPagamentoUseCase {
 
         Instant agora = Instant.now();
         if (pagamento.estaVencidoEm(agora)) {
-            pagamento.expirar(agora);
-            salvarPagamentoPort.salvar(pagamento);
-            publicarEventoPagamentoPort.publicarPagamentoExpirado(new PagamentoExpiradoEvent(
-                    pagamento.getId(),
-                    pagamento.getReservaId(),
-                    pagamento.getSessaoId(),
-                    pagamento.getAssentoId(),
-                    agora
-            ));
-            throw new PagamentoExpiradoException(pagamento.getId(), pagamento.getExpiraEm());
+            throw expirarEPublicar(pagamento, agora);
         }
 
-        DadosCartao dadosCartao = new DadosCartao(
-                command.numeroCartao(),
-                command.nomeTitular(),
-                command.validade(),
-                command.cvv()
-        );
+        final String identificadorOrigem;
+        final RespostaGateway resposta;
 
-        RespostaGateway resposta = gatewayCartaoPort.processarCobranca(
-                pagamento.getId(),
-                pagamento.getValor(),
-                dadosCartao
-        );
+        if (command.metodoPagamento() == MetodoPagamento.PIX) {
+            identificadorOrigem = "PIX";
+            resposta = gatewayPixPort.processarPix(pagamento.getId(), pagamento.getValor());
+        } else {
+            DadosCartao dadosCartao = new DadosCartao(
+                    command.numeroCartao(),
+                    command.nomeTitular(),
+                    command.validade(),
+                    command.cvv()
+            );
+            identificadorOrigem = "finalCartao=" + dadosCartao.obterUltimosQuatroDigitos();
+            resposta = gatewayCartaoPort.processarCobranca(
+                    pagamento.getId(),
+                    pagamento.getValor(),
+                    dadosCartao
+            );
+        }
 
         Instant instantePosGateway = Instant.now();
+        if (pagamento.estaVencidoEm(instantePosGateway)) {
+            throw expirarEPublicar(pagamento, instantePosGateway);
+        }
+
         if (resposta.aprovado()) {
             pagamento.aprovar(command.metodoPagamento(), resposta.codigoTransacao(), instantePosGateway);
             Pagamento salvo = salvarPagamentoPort.salvar(pagamento);
@@ -94,8 +102,8 @@ public class ProcessarPagamentoService implements ProcessarPagamentoUseCase {
                     salvo.getCodigoTransacaoGateway(),
                     instantePosGateway
             ));
-            log.info("Pagamento aprovado: pagamentoId={}, reservaId={}, finalCartao={}",
-                    salvo.getId(), salvo.getReservaId(), dadosCartao.obterUltimosQuatroDigitos());
+            log.info("Pagamento aprovado: pagamentoId={}, reservaId={}, origem={}",
+                    salvo.getId(), salvo.getReservaId(), identificadorOrigem);
             return PagamentoResult.fromDomain(salvo);
         } else {
             pagamento.recusar(command.metodoPagamento(), resposta.motivoRecusa(), instantePosGateway);
@@ -112,5 +120,18 @@ public class ProcessarPagamentoService implements ProcessarPagamentoUseCase {
                     salvo.getId(), salvo.getReservaId(), salvo.getMotivoRecusa());
             return PagamentoResult.fromDomain(salvo);
         }
+    }
+
+    private PagamentoExpiradoException expirarEPublicar(Pagamento pagamento, Instant agora) {
+        pagamento.expirar(agora);
+        salvarPagamentoPort.salvar(pagamento);
+        publicarEventoPagamentoPort.publicarPagamentoExpirado(new PagamentoExpiradoEvent(
+                pagamento.getId(),
+                pagamento.getReservaId(),
+                pagamento.getSessaoId(),
+                pagamento.getAssentoId(),
+                agora
+        ));
+        return new PagamentoExpiradoException(pagamento.getId(), pagamento.getExpiraEm());
     }
 }

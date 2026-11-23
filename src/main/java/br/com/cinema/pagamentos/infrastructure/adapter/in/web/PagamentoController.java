@@ -42,7 +42,7 @@ public class PagamentoController {
     @PostMapping(value = "/{id}/processar", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
             summary = "Processar pagamento da reserva",
-            description = "Efetua a transação com cartão de crédito via gateway. Simulação determinística: final 4242 aprova, final 0000 recusa."
+            description = "Efetua a transação via Cartão de Crédito, Débito ou PIX. Simulação determinística: final 4242 aprova, final 0000 recusa, final 9999 simula latência (1,5s) e PIX confirma imediatamente."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Pagamento processado com sucesso (aprovado ou recusado pela operadora)",

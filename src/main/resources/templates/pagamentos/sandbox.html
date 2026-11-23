@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandbox de Checkout • Cinema Pagamentos</title>
+    <link rel="stylesheet" th:href="@{/css/pagamentos-checkout.css}">
+</head>
+<body>
+<div class="page-shell">
+    <header class="topbar">
+        <a th:href="@{/pagamentos/sandbox}" class="brand">
+            <div class="brand-mark">C</div>
+            <div>
+                <div class="brand-title">CineTicket • Checkout Sandbox</div>
+                <div class="brand-subtitle">Simulador de experiência do usuário do módulo pagamentos</div>
+            </div>
+        </a>
+
+        <div class="topbar-actions">
+            <a th:href="@{/swagger-ui.html}" target="_blank" class="nav-pill">Swagger / OpenAPI ↗</a>
+        </div>
+    </header>
+
+    <div th:if="${erro}" class="alert-banner error" th:text="${erro}"></div>
+
+    <div class="sandbox-grid">
+        <!-- Gerar nova cobrança simulada -->
+        <section class="card-panel">
+            <h1 class="panel-title">Simular Nova Reserva para Checkout</h1>
+            <p class="panel-subtitle">
+                Como o módulo de <strong>reservas</strong> ainda está desacoplado, este painel cria uma cobrança real
+                com status <span class="mono">AGUARDANDO_PAGAMENTO</span> e janela de <strong>10 minutos</strong> para testar a jornada completa no navegador.
+            </p>
+
+            <div class="quick-chips">
+                <span class="quick-chips-label">Cenários rápidos:</span>
+                <button type="button" class="chip-btn" onclick="preencherCenario('Duna: Parte 2 (Legendado)', 'Sala 04 • IMAX', 'Hoje • 21:00', 'G12', '58.00')">IMAX R$ 58,00</button>
+                <button type="button" class="chip-btn" onclick="preencherCenario('Interestelar (Reexibição)', 'Sala 02 • 2D', 'Hoje • 19:30', 'D08', '24.50')">Meia 2D R$ 24,50</button>
+                <button type="button" class="chip-btn" onclick="preencherCenario('Wicked (Dublado)', 'Sala 01 • VIP', 'Amanhã • 20:15', 'B04', '92.00')">VIP R$ 92,00</button>
+            </div>
+
+            <form th:action="@{/pagamentos/sandbox/criar}" method="post">
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label for="filme">Filme (ilustrativo para UX)</label>
+                        <input id="filme" name="filme" type="text" value="Duna: Parte 2 (Legendado)" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="sala">Sala</label>
+                        <input id="sala" name="sala" type="text" value="Sala 04 • IMAX" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="horario">Horário</label>
+                        <input id="horario" name="horario" type="text" value="Hoje • 21:00" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="assento">Assento</label>
+                        <input id="assento" name="assento" type="text" value="G12" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="valor">Valor da Cobrança (R$)</label>
+                        <input id="valor" name="valor" type="number" step="0.01" min="0.01" value="45.00" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    Gerar Cobrança e Abrir Página de Pagamento →
+                </button>
+            </form>
+        </section>
+
+        <!-- Guia de testes e acesso direto por ID -->
+        <aside class="card-panel">
+            <h2 class="panel-title">Guia de Teste de UX</h2>
+            <p class="panel-subtitle">Use os dados determinísticos abaixo na tela de pagamento:</p>
+
+            <ul class="scenario-list">
+                <li><strong>Final 4242 (ou outro):</strong> Aprova imediatamente e gera código <span class="mono">AUTH-XXXXXXXX</span>.</li>
+                <li><strong>Final 0000:</strong> Simula recusa do emissor e exibe a tela de erro/liberação do assento.</li>
+                <li><strong>Final 9999:</strong> Simula latência de rede (1,5s) para avaliar o estado de <em>loading</em> sem travar Virtual Threads.</li>
+                <li><strong>Aba PIX:</strong> Exibe QR Code e Copia e Cola com confirmação instantânea <span class="mono">PIX-XXXXXXXX</span>.</li>
+                <li><strong>Expiração (10 min):</strong> Timer sincronizado com o servidor + botão de simulação rápida no resumo do checkout.</li>
+            </ul>
+
+            <div class="sandbox-tools">
+                <div class="sandbox-tools-title">Abrir cobrança existente por ID</div>
+                <form onsubmit="abrirPorId(event)">
+                    <div class="form-group">
+                        <input id="existing-payment-id" type="text" placeholder="Cole o UUID do pagamento..." required>
+                    </div>
+                    <button type="submit" class="btn btn-secondary" style="width: 100%;">
+                        Ir para Checkout
+                    </button>
+                </form>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<script>
+    function preencherCenario(filme, sala, horario, assento, valor) {
+        document.getElementById('filme').value = filme;
+        document.getElementById('sala').value = sala;
+        document.getElementById('horario').value = horario;
+        document.getElementById('assento').value = assento;
+        document.getElementById('valor').value = valor;
+    }
+
+    function abrirPorId(event) {
+        event.preventDefault();
+        const id = document.getElementById('existing-payment-id').value.trim();
+        if (id) {
+            window.location.href = '/pagamentos/' + encodeURIComponent(id) + '/checkout';
+        }
+    }
+</script>
+</body>
+</html>

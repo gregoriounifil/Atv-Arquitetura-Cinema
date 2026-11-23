@@ -1,6 +1,7 @@
 package br.com.cinema.pagamentos.infrastructure.adapter.out.gateway;
 
 import br.com.cinema.pagamentos.application.port.out.GatewayCartaoPort;
+import br.com.cinema.pagamentos.application.port.out.GatewayPixPort;
 import br.com.cinema.pagamentos.application.port.out.RespostaGateway;
 import br.com.cinema.pagamentos.domain.model.DadosCartao;
 import org.slf4j.Logger;
@@ -11,7 +12,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 @Component
-public class FakePaymentGatewayAdapter implements GatewayCartaoPort {
+public class FakePaymentGatewayAdapter implements GatewayCartaoPort, GatewayPixPort {
 
     private static final Logger log = LoggerFactory.getLogger(FakePaymentGatewayAdapter.class);
 
@@ -36,5 +37,12 @@ public class FakePaymentGatewayAdapter implements GatewayCartaoPort {
         String codigoAutorizacao = "AUTH-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         log.info("[FAKE-GATEWAY] Transacao APROVADA para pagamentoId={}, auth={}", pagamentoId, codigoAutorizacao);
         return new RespostaGateway(true, codigoAutorizacao, null);
+    }
+
+    @Override
+    public RespostaGateway processarPix(UUID pagamentoId, BigDecimal valor) {
+        String codigoPix = "PIX-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        log.info("[FAKE-GATEWAY] PIX confirmado para pagamentoId={}, valor={}, codigo={}", pagamentoId, valor, codigoPix);
+        return new RespostaGateway(true, codigoPix, null);
     }
 }
